@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Clock, LogIn, LogOut, Calendar as CalendarIcon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { getDataStore, saveDataStore, Attendance as AttendanceType } from '@/lib/dataStore';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -16,55 +15,68 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { api, type Attendance as AttendanceType } from '@/lib/api';
+import { queryClient } from '@/lib/queryClient';
 
 export default function Attendance() {
   const { currentUser } = useAuth();
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const data = getDataStore();
 
-  const userAttendance = currentUser
-    ? data.attendance.filter(a => a.userId === currentUser.id)
-    : [];
+  const { data: userAttendance = [] } = useQuery<AttendanceType[]>({
+    queryKey: ['/api/attendance'],
+    enabled: !!currentUser,
+  });
 
   const todayAttendance = userAttendance.find(
-    a => a.date === format(new Date(), 'yyyy-MM-dd')
+    (a: AttendanceType) => a.date === format(new Date(), 'yyyy-MM-dd')
   );
 
+  const clockInMutation = useMutation({
+    mutationFn: () => api.clockIn(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['todayAttendance'] });
+      toast({
+        title: 'Clocked In',
+        description: 'Attendance marked successfully'
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Clock In Failed',
+        description: error.message || 'Failed to clock in',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const clockOutMutation = useMutation({
+    mutationFn: () => api.clockOut(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['todayAttendance'] });
+      toast({
+        title: 'Clocked Out',
+        description: 'Clock out recorded successfully'
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Clock Out Failed',
+        description: error.message || 'Failed to clock out',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const handleClockIn = () => {
-    if (!currentUser) return;
-
-    const newAttendance: AttendanceType = {
-      id: `a${Date.now()}`,
-      userId: currentUser.id,
-      date: format(new Date(), 'yyyy-MM-dd'),
-      inTime: format(new Date(), 'HH:mm'),
-      outTime: '',
-      status: 'Present'
-    };
-
-    data.attendance.push(newAttendance);
-    saveDataStore(data);
-
-    toast({
-      title: 'Clocked In',
-      description: `Attendance marked at ${newAttendance.inTime}`
-    });
+    clockInMutation.mutate();
   };
 
   const handleClockOut = () => {
-    if (!currentUser || !todayAttendance) return;
-
-    const index = data.attendance.findIndex(a => a.id === todayAttendance.id);
-    if (index !== -1) {
-      data.attendance[index].outTime = format(new Date(), 'HH:mm');
-      saveDataStore(data);
-
-      toast({
-        title: 'Clocked Out',
-        description: `You clocked out at ${data.attendance[index].outTime}`
-      });
-    }
+    clockOutMutation.mutate();
   };
 
   const getStatusColor = (status: string) => {
@@ -170,7 +182,7 @@ export default function Attendance() {
                 </TableCell>
               </TableRow>
             ) : (
-              userAttendance.slice().reverse().map(record => (
+              userAttendance.slice().reverse().map((record: AttendanceType) => (
                 <TableRow key={record.id}>
                   <TableCell>{format(new Date(record.date), 'MMM dd, yyyy')}</TableCell>
                   <TableCell>{record.inTime}</TableCell>

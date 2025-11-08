@@ -5,10 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
-import { getDataStore, saveDataStore } from '@/lib/dataStore';
 import { useToast } from '@/hooks/use-toast';
 import { User, Mail, Building2, Wallet } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { useMutation } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 
 export default function Profile() {
   const { currentUser } = useAuth();
@@ -20,29 +21,30 @@ export default function Profile() {
     department: currentUser?.department || ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentUser) return;
-
-    const data = getDataStore();
-    const index = data.users.findIndex(u => u.id === currentUser.id);
-    
-    if (index !== -1) {
-      data.users[index] = {
-        ...data.users[index],
-        name: formData.name,
-        email: formData.email,
-        department: formData.department
-      };
-      saveDataStore(data);
-
+  const updateMutation = useMutation({
+    mutationFn: (data: { name: string; email: string; department: string }) => 
+      api.updateUser(currentUser!.id, data),
+    onSuccess: () => {
       toast({
         title: 'Profile Updated',
         description: 'Your profile has been updated successfully'
       });
-
       setIsEditing(false);
-    }
+      window.location.reload();
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Update Failed',
+        description: error.message || 'Failed to update profile',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    updateMutation.mutate(formData);
   };
 
   if (!currentUser) return null;
@@ -156,20 +158,20 @@ export default function Profile() {
             <div className="space-y-3">
               <div>
                 <p className="text-sm text-muted-foreground">Basic Salary</p>
-                <p className="text-lg font-bold">₹{currentUser.salary.basic.toLocaleString()}</p>
+                <p className="text-lg font-bold">₹{currentUser.basicSalary.toLocaleString()}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">HRA</p>
-                <p className="text-lg font-bold">₹{currentUser.salary.hra.toLocaleString()}</p>
+                <p className="text-lg font-bold">₹{currentUser.hra.toLocaleString()}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Other Earnings</p>
-                <p className="text-lg font-bold">₹{currentUser.salary.otherEarnings.toLocaleString()}</p>
+                <p className="text-lg font-bold">₹{currentUser.otherEarnings.toLocaleString()}</p>
               </div>
               <div className="border-t pt-3">
                 <p className="text-sm text-muted-foreground">Gross Salary</p>
                 <p className="text-xl font-bold">
-                  ₹{(currentUser.salary.basic + currentUser.salary.hra + currentUser.salary.otherEarnings).toLocaleString()}
+                  ₹{(currentUser.basicSalary + currentUser.hra + currentUser.otherEarnings).toLocaleString()}
                 </p>
               </div>
             </div>
@@ -180,11 +182,11 @@ export default function Profile() {
             <div className="space-y-3">
               <div>
                 <p className="text-sm text-muted-foreground">Annual Leave</p>
-                <p className="text-lg font-bold">{currentUser.leaveBalance.annual} days</p>
+                <p className="text-lg font-bold">{currentUser.annualLeave} days</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Sick Leave</p>
-                <p className="text-lg font-bold">{currentUser.leaveBalance.sick} days</p>
+                <p className="text-lg font-bold">{currentUser.sickLeave} days</p>
               </div>
             </div>
           </Card>
